@@ -248,6 +248,34 @@ class CanvasPainter extends CustomPainter {
         ..strokeWidth = 3
         ..style = .stroke,
     );
+
+    _drawResizeHandles(canvas);
+  }
+
+  void _drawResizeHandles(Canvas canvas) {
+    final select = Select.currentSelect;
+    if (!select.doneSelecting) return;
+
+    // keep the box and handles the same size on screen at any zoom
+    final pixel = 1 / currentScale;
+
+    canvas.drawRect(
+      currentSelection!.path.getBounds(),
+      Paint()
+        ..color = primaryColor.withValues(alpha: 0.5)
+        ..strokeWidth = pixel
+        ..style = .stroke,
+    );
+
+    final fill = Paint()..color = Colors.white;
+    final border = Paint()
+      ..color = primaryColor
+      ..strokeWidth = 2 * pixel
+      ..style = .stroke;
+    for (final handle in select.resizeHandles) {
+      canvas.drawCircle(handle, Select.handleRadius * pixel, fill);
+      canvas.drawCircle(handle, Select.handleRadius * pixel, border);
+    }
   }
 
   static const double _pageIndicatorFontSize = 20;

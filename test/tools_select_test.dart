@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:perfect_freehand/perfect_freehand.dart';
 import 'package:saber/components/canvas/_asset_cache.dart';
 import 'package:saber/components/canvas/_stroke.dart';
+import 'package:saber/components/canvas/canvas_image.dart';
 import 'package:saber/components/canvas/image/editor_image.dart';
 import 'package:saber/data/tools/select.dart';
 import 'package:sbn/has_size.dart';
@@ -121,6 +122,74 @@ void main() {
         isEmpty,
         reason: 'No strokes should be selected',
       );
+    });
+
+    group('resize', () {
+      late Stroke stroke;
+      late TestImage image;
+
+      setUp(() {
+        final select = Select.currentSelect;
+        stroke = Stroke(
+          color: Stroke.defaultColor,
+          pressureEnabled: Stroke.defaultPressureEnabled,
+          options: StrokeOptions(size: 2),
+          pageIndex: 0,
+          page: const HasSize(Size(100, 100)),
+          toolId: .fountainPen,
+        )..addPoint(const Offset(30, 30));
+        image = TestImage(dstRect: const .fromLTWH(20, 20, 20, 20));
+
+        // Drag gesture in a 40x40 square shape, on page 0
+        select.onDragStart(const Offset(10, 10), 0);
+        select.onDragUpdate(const Offset(10, 50));
+        select.onDragUpdate(const Offset(50, 50));
+        select.onDragUpdate(const Offset(50, 10));
+        select.onDragEnd([stroke], [image]);
+        expect(select.selectResult.strokes, [stroke]);
+        expect(select.selectResult.images, [image]);
+      });
+
+      test('finds the handle under the pointer', () {
+        final select = Select.currentSelect;
+        expect(select.resizeHandleAt(const Offset(51, 49), 1), 2);
+        expect(select.resizeHandleAt(const Offset(30, 30), 1), isNull);
+        // hit radius shrinks in page pixels when zoomed in
+        expect(select.resizeHandleAt(const Offset(60, 60), 1), 2);
+        expect(select.resizeHandleAt(const Offset(60, 60), 4), isNull);
+      });
+
+      test('scales about the opposite corner', () {
+        final select = Select.currentSelect;
+        select.onResizeStart(2); // bottom right, anchored at top left
+        expect(select.resizeAnchor, const Offset(10, 10));
+
+        select.onResizeUpdate(const Offset(70, 95)); // ignore off-diagonal
+        select.onResizeUpdate(const Offset(90, 90));
+        final resize = select.onResizeEnd();
+
+        expect(resize.factor, moreOrLessEquals(2));
+        expect(select.isResizing, isFalse);
+        expect(stroke.points.single, const Offset(50, 50));
+        expect(stroke.options.size, moreOrLessEquals(4));
+        expect(image.dstRect, const Rect.fromLTWH(30, 30, 40, 40));
+        expect(
+          select.selectResult.path.getBounds(),
+          const Rect.fromLTRB(10, 10, 90, 90),
+        );
+      });
+
+      test('does not shrink below the minimum size', () {
+        final select = Select.currentSelect;
+        select.onResizeStart(2);
+        select.onResizeUpdate(const Offset(10, 10));
+        final resize = select.onResizeEnd();
+        expect(resize.factor, greaterThan(0));
+        expect(
+          image.dstRect.shortestSide,
+          moreOrLessEquals(CanvasImage.minImageSize),
+        );
+      });
     });
 
     group('getDominantStrokeColor', () {

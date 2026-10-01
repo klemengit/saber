@@ -35,6 +35,7 @@ import 'package:saber/data/editor/editor_exporter.dart';
 import 'package:saber/data/editor/editor_history.dart';
 import 'package:saber/data/editor/page.dart';
 import 'package:saber/data/extensions/change_notifier_extensions.dart';
+import 'package:saber/data/extensions/list_extensions.dart';
 import 'package:saber/data/extensions/matrix4_extensions.dart';
 import 'package:saber/data/file_manager/file_manager.dart';
 import 'package:saber/data/nextcloud/saber_syncer.dart';
@@ -419,6 +420,17 @@ class EditorState extends State<Editor> {
             );
           }
 
+        case .resize:
+          final (:factor, :anchor) = item.resize!;
+          Select.scaleItems(item.strokes, item.images, 1 / factor, anchor);
+          final select = Select.currentSelect;
+          if (select.doneSelecting) {
+            select.selectResult.path = select.selectResult.path.scaleAbout(
+              1 / factor,
+              anchor,
+            );
+          }
+
         case .quillChange:
           final quill = coreInfo.pages[item.pageIndex].quill;
           quill.controller.undo();
@@ -436,7 +448,7 @@ class EditorState extends State<Editor> {
           coreInfo.backgroundPattern = item.backgroundPatternChange!.previous;
       }
 
-      if (item.type != .move) {
+      if (item.type != .move && item.type != .resize) {
         Select.currentSelect.unselect();
       }
     });
@@ -465,6 +477,15 @@ class EditorState extends State<Editor> {
               -item.offset!.top,
               -item.offset!.right,
               -item.offset!.bottom,
+            ),
+          ),
+        );
+      case .resize:
+        undo(
+          item.copyWith(
+            resize: (
+              factor: 1 / item.resize!.factor,
+              anchor: item.resize!.anchor,
             ),
           ),
         );
@@ -577,8 +598,19 @@ class EditorState extends State<Editor> {
       removeExcessPages();
     } else if (currentTool is Select) {
       final select = currentTool as Select;
-      if (select.doneSelecting &&
-          select.selectResult.pageIndex == dragPageIndex! &&
+      final onSelectedPage =
+          select.doneSelecting &&
+          select.selectResult.pageIndex == dragPageIndex!;
+      final handleIndex = onSelectedPage
+          ? select.resizeHandleAt(
+              position,
+              _transformationController.value.approxScale,
+            )
+          : null;
+      if (handleIndex != null) {
+        // resize selection in onDrawUpdate
+        select.onResizeStart(handleIndex);
+      } else if (onSelectedPage &&
           select.selectResult.path.contains(position)) {
         // drag selection in onDrawUpdate
       } else {
@@ -619,7 +651,9 @@ class EditorState extends State<Editor> {
       removeExcessPages();
     } else if (currentTool is Select) {
       final select = currentTool as Select;
-      if (select.doneSelecting) {
+      if (select.isResizing) {
+        select.onResizeUpdate(position);
+      } else if (select.doneSelecting) {
         for (final stroke in select.selectResult.strokes) {
           stroke.shift(offset);
         }
@@ -681,8 +715,22 @@ class EditorState extends State<Editor> {
           ),
         );
       } else if (currentTool is Select) {
-        if (moveOffset == .zero) return;
         final select = currentTool as Select;
+        if (select.isResizing) {
+          final resize = select.onResizeEnd();
+          if (resize.factor == 1) return;
+          history.recordChange(
+            EditorHistoryItem(
+              type: .resize,
+              pageIndex: dragPageIndex!,
+              strokes: select.selectResult.strokes,
+              images: select.selectResult.images,
+              resize: resize,
+            ),
+          );
+          return;
+        }
+        if (moveOffset == .zero) return;
         if (select.doneSelecting) {
           history.recordChange(
             EditorHistoryItem(

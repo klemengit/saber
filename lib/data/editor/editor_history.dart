@@ -145,6 +145,7 @@ class EditorHistoryItem {
     required this.strokes,
     required this.images,
     this.offset,
+    this.resize,
     this.page,
     this.quillChange,
     this.colorChange,
@@ -152,6 +153,10 @@ class EditorHistoryItem {
   }) : assert(
          type != .move || offset != null,
          'Offset must be provided for move',
+       ),
+       assert(
+         type != .resize || resize != null,
+         'Resize must be provided for resize',
        ),
        assert(
          type != .deletePage || page != null,
@@ -183,6 +188,9 @@ class EditorHistoryItem {
   final List<Stroke> strokes;
   final List<EditorImage> images;
   final Rect? offset;
+
+  /// The scale factor of a resize, and the point it was scaled about.
+  final ({double factor, Offset anchor})? resize;
   final EditorPage? page;
   final DocChange? quillChange;
   final Map<Stroke, Change<Color>>? colorChange;
@@ -194,6 +202,7 @@ class EditorHistoryItem {
     List<Stroke>? strokes,
     List<EditorImage>? images,
     Rect? offset,
+    ({double factor, Offset anchor})? resize,
     EditorPage? page,
     DocChange? quillChange,
     Map<Stroke, Change<Color>>? colorChange,
@@ -205,6 +214,7 @@ class EditorHistoryItem {
       strokes: strokes ?? this.strokes,
       images: images ?? this.images,
       offset: offset ?? this.offset,
+      resize: resize ?? this.resize,
       page: page ?? this.page,
       quillChange: quillChange ?? this.quillChange,
       colorChange: colorChange ?? this.colorChange,
@@ -220,6 +230,7 @@ enum EditorHistoryItemType {
   deletePage,
   insertPage,
   move,
+  resize,
   quillChange,
   quillUndoneChange,
   changeColor,

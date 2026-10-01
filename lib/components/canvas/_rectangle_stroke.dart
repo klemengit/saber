@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:one_dollar_unistroke_recognizer/one_dollar_unistroke_recognizer.dart';
 import 'package:perfect_freehand/perfect_freehand.dart';
 import 'package:saber/components/canvas/_stroke.dart';
+import 'package:saber/data/extensions/list_extensions.dart';
 import 'package:sbn/has_size.dart';
 
 class RectangleStroke extends Stroke {
@@ -135,6 +136,12 @@ class RectangleStroke extends Stroke {
   void shift(Offset offset) {
     rect = rect.shift(offset);
     super.shift(offset);
+  }
+
+  @override
+  void scale(double factor, Offset anchor) {
+    rect = rect.scaleAbout(factor, anchor);
+    super.scale(factor, anchor);
   }
 
   @override

@@ -1,6 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:saber/components/canvas/_stroke.dart';
+import 'package:saber/components/canvas/canvas_image.dart';
 import 'package:saber/components/canvas/image/editor_image.dart';
+import 'package:saber/data/extensions/list_extensions.dart';
 import 'package:saber/data/tools/_tool.dart';
 import 'package:sbn/tool_id.dart';
 
@@ -27,6 +31,7 @@ class Select extends Tool {
 
   void unselect() {
     doneSelecting = false;
+    resizeAnchor = null;
     selectResult.pageIndex = -1;
   }
 
@@ -47,6 +52,128 @@ class Select extends Tool {
     return colorDistribution.entries.reduce((a, b) {
       return a.value > b.value ? a : b;
     }).key;
+  }
+
+  /// The radius of a resize handle, in screen pixels.
+  static const handleRadius = 7.0;
+
+  /// How far from a resize handle a touch still grabs it,
+  /// in screen pixels.
+  static const handleHitRadius = 24.0;
+
+  /// The smallest side length, in page pixels, that a selection
+  /// can be shrunk to.
+  static const minResizeSize = 10.0;
+
+  /// The four corners of the selection's bounding box,
+  /// clockwise from the top left.
+  List<Offset> get resizeHandles {
+    final bounds = selectResult.path.getBounds();
+    return [
+      bounds.topLeft,
+      bounds.topRight,
+      bounds.bottomRight,
+      bounds.bottomLeft,
+    ];
+  }
+
+  /// Returns the index into [resizeHandles] of the handle
+  /// under [position], or null if there isn't one.
+  ///
+  /// [scale] is the canvas zoom level, so that handles
+  /// are the same size on screen regardless of zoom.
+  int? resizeHandleAt(Offset position, double scale) {
+    if (!doneSelecting) return null;
+    final hitRadius = handleHitRadius / scale;
+    final handles = resizeHandles;
+    int? closest;
+    var closestDistance = hitRadius;
+    for (int i = 0; i < handles.length; i++) {
+      final distance = (handles[i] - position).distance;
+      if (distance <= closestDistance) {
+        closest = i;
+        closestDistance = distance;
+      }
+    }
+    return closest;
+  }
+
+  /// The fixed corner that the selection is being scaled about,
+  /// or null if the selection isn't being resized.
+  Offset? resizeAnchor;
+
+  /// The vector from [resizeAnchor] to the grabbed corner,
+  /// at the start of the resize.
+  var _resizeStartVector = Offset.zero;
+
+  /// The total scale factor of the current resize so far.
+  var resizeFactor = 1.0;
+
+  /// The smallest allowed [resizeFactor],
+  /// so the selection and its images don't get too small.
+  var _minResizeFactor = 0.0;
+
+  bool get isResizing => resizeAnchor != null;
+
+  void onResizeStart(int handleIndex) {
+    final handles = resizeHandles;
+    resizeAnchor = handles[(handleIndex + 2) % 4];
+    _resizeStartVector = handles[handleIndex] - resizeAnchor!;
+    resizeFactor = 1;
+
+    final bounds = selectResult.path.getBounds();
+    _minResizeFactor = minResizeSize / bounds.shortestSide;
+    for (final image in selectResult.images) {
+      _minResizeFactor = max(
+        _minResizeFactor,
+        CanvasImage.minImageSize / image.dstRect.shortestSide,
+      );
+    }
+  }
+
+  /// Scales the selection so the grabbed corner follows [position],
+  /// keeping the aspect ratio.
+  void onResizeUpdate(Offset position) {
+    final anchor = resizeAnchor!;
+    final lengthSquared = _resizeStartVector.distanceSquared;
+    if (lengthSquared == 0) return;
+
+    // project the pointer onto the diagonal through the anchor
+    final delta = position - anchor;
+    final newFactor = max(
+      _minResizeFactor,
+      (delta.dx * _resizeStartVector.dx + delta.dy * _resizeStartVector.dy) /
+          lengthSquared,
+    );
+
+    final step = newFactor / resizeFactor;
+    scaleItems(selectResult.strokes, selectResult.images, step, anchor);
+    selectResult.path = selectResult.path.scaleAbout(step, anchor);
+    resizeFactor = newFactor;
+  }
+
+  /// Ends the resize and returns the total scale factor
+  /// and the anchor it was applied about.
+  ({double factor, Offset anchor}) onResizeEnd() {
+    final result = (factor: resizeFactor, anchor: resizeAnchor!);
+    resizeAnchor = null;
+    resizeFactor = 1;
+    return result;
+  }
+
+  /// Scales [strokes] and [images] by [factor] about [anchor].
+  static void scaleItems(
+    List<Stroke> strokes,
+    List<EditorImage> images,
+    double factor,
+    Offset anchor,
+  ) {
+    for (final stroke in strokes) {
+      stroke.scale(factor, anchor);
+    }
+    for (final image in images) {
+      image.dstRect = image.dstRect.scaleAbout(factor, anchor);
+    }
   }
 
   void onDragStart(Offset position, int pageIndex) {
