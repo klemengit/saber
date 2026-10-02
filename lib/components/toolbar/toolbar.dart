@@ -15,6 +15,7 @@ import 'package:saber/components/toolbar/color_bar.dart';
 import 'package:saber/components/toolbar/export_bar.dart';
 import 'package:saber/components/toolbar/pen_modal.dart';
 import 'package:saber/components/toolbar/selection_bar.dart';
+import 'package:saber/components/toolbar/shape_modal.dart';
 import 'package:saber/components/toolbar/size_picker.dart';
 import 'package:saber/components/toolbar/toolbar_button.dart';
 import 'package:saber/data/editor/page.dart';
@@ -28,6 +29,7 @@ import 'package:saber/data/tools/laser_pointer.dart';
 import 'package:saber/data/tools/pen.dart';
 import 'package:saber/data/tools/pencil.dart';
 import 'package:saber/data/tools/select.dart';
+import 'package:saber/data/tools/shape_tool.dart';
 import 'package:saber/i18n/strings.g.dart';
 
 class Toolbar extends StatefulWidget {
@@ -245,6 +247,7 @@ class _ToolbarState extends State<Toolbar> {
                 getTool: () => Pencil.currentPencil,
                 setTool: widget.setTool,
               ),
+              .shapes => const ShapeModal(),
               .select => SelectionBar(
                 duplicateSelection: widget.duplicateSelection,
                 deleteSelection: widget.deleteSelection,
@@ -385,6 +388,25 @@ class _ToolbarState extends State<Toolbar> {
                 },
                 padding: buttonPadding,
                 child: const FaIcon(Highlighter.highlighterIcon, size: 16),
+              ),
+              ToolbarIconButton(
+                tooltip: ShapeTool.currentShapeTool.name,
+                selected: widget.currentTool == ShapeTool.currentShapeTool,
+                enabled: !widget.readOnly,
+                onPressed: () {
+                  if (widget.currentTool == ShapeTool.currentShapeTool) {
+                    if (toolOptionsType.value == .shapes) {
+                      toolOptionsType.value = .hide;
+                    } else {
+                      toolOptionsType.value = .shapes;
+                    }
+                  } else {
+                    toolOptionsType.value = .hide;
+                    widget.setTool(ShapeTool.currentShapeTool);
+                  }
+                },
+                padding: buttonPadding,
+                child: const Icon(ShapeTool.shapesIcon),
               ),
               ValueListenableBuilder(
                 valueListenable: showColorOptions,
@@ -583,4 +605,4 @@ class _ToolbarState extends State<Toolbar> {
   }
 }
 
-enum ToolOptions { hide, pen, highlighter, pencil, select }
+enum ToolOptions { hide, pen, highlighter, pencil, shapes, select }

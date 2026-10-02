@@ -133,23 +133,32 @@ class CanvasPainter extends CustomPainter {
         }
       }
 
-      late final shapePaint = Paint()
-        ..color = paint.color
-        ..style = .stroke
-        ..strokeWidth = stroke.options.size;
-
-      if (stroke is CircleStroke) {
-        canvas.drawCircle(stroke.center, stroke.radius, shapePaint);
-      } else if (stroke is RectangleStroke) {
-        final strokeSize = stroke.options.size;
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(stroke.rect, Radius.circular(strokeSize / 4)),
-          shapePaint,
-        );
-      } else {
+      if (!_drawShapeStroke(canvas, stroke, paint.color)) {
         canvas.drawPath(_selectPath(stroke), paint);
       }
     }
+  }
+
+  /// Draws [stroke] as an outline if it is a [CircleStroke]
+  /// or [RectangleStroke], and returns whether it was drawn.
+  bool _drawShapeStroke(Canvas canvas, Stroke stroke, Color color) {
+    late final shapePaint = Paint()
+      ..color = color
+      ..style = .stroke
+      ..strokeWidth = stroke.options.size;
+
+    if (stroke is CircleStroke) {
+      canvas.drawCircle(stroke.center, stroke.radius, shapePaint);
+      return true;
+    } else if (stroke is RectangleStroke) {
+      final strokeSize = stroke.options.size;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(stroke.rect, Radius.circular(strokeSize / 4)),
+        shapePaint,
+      );
+      return true;
+    }
+    return false;
   }
 
   void _drawCurrentStroke(Canvas canvas) {
@@ -173,6 +182,8 @@ class CanvasPainter extends CustomPainter {
         ..setFloat(2, color.b);
       paint.maskFilter = _getPencilMaskFilter(currentStroke!.options.size);
     }
+
+    if (_drawShapeStroke(canvas, currentStroke!, paint.color)) return;
 
     // Current stroke always uses high quality
     canvas.drawPath(currentStroke!.highQualityPath, paint);

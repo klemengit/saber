@@ -48,6 +48,7 @@ import 'package:saber/data/tools/pen.dart';
 import 'package:saber/data/tools/pencil.dart';
 import 'package:saber/data/tools/select.dart';
 import 'package:saber/data/tools/shape_pen.dart';
+import 'package:saber/data/tools/shape_tool.dart';
 import 'package:saber/i18n/strings.g.dart';
 import 'package:saber/pages/home/whiteboard.dart';
 import 'package:sbn/change.dart';
@@ -1481,6 +1482,8 @@ class EditorState extends State<Editor> {
               Highlighter.currentHighlighter = tool;
             } else if (tool is Pencil) {
               Pencil.currentPencil = tool;
+            } else if (tool is ShapeTool) {
+              // keeps its own instance, so the pen button is unaffected
             } else if (tool is Pen) {
               Pen.currentPen = tool;
             }
