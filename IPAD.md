@@ -81,7 +81,7 @@ build/linux/x64/debug/bundle/saber
 | SideStore: "No Wi-Fi or VPN connection" | LocalDevVPN connected and Wi-Fi on; turn off other VPNs and DNS/ad blockers; restart both apps; retry. |
 | An app shows **revoked** | LocalDevVPN on, SideStore → **Refresh All**. |
 | SideStore does not open at all | Reinstall it from Linux with iloader (below). |
-| iloader: "Maximum certificates reached" | Click **Continue**, then **Refresh All** in SideStore afterwards so all apps use the new certificate. |
+| Installing fails: "signing certificate … was revoked" | SideStore's own certificate is revoked. See *SideStore must own the certificate* below. |
 
 ### Reinstalling SideStore from Linux (rarely needed)
 
@@ -93,8 +93,30 @@ SideStore itself is broken.
    `idevicepair validate` should report success.
 3. Run `~/Applications/iloader.AppImage`
    ([releases](https://github.com/nab138/iloader/releases)), sign in with the
-   Apple ID, select the iPad, click **SideStore (Stable)**.
-4. On the iPad: LocalDevVPN on, open SideStore, **Refresh All**.
+   Apple ID, select the iPad, click **SideStore (Stable)**. If it reports
+   "Maximum certificates reached", click **Continue**.
+4. Give SideStore its own certificate, as below.
+
+### SideStore must own the certificate
+
+A free Apple ID holds very few signing certificates, and making a new one
+revokes an old one. iloader signs SideStore with *iloader's* certificate,
+but SideStore cannot use that one to sign other apps. If SideStore is left
+with an old, revoked certificate of its own, refreshing installed apps may
+still seem to work, but installing anything fails with "signing certificate
+… was revoked".
+
+Fix, on the iPad, all in one go without leaving SideStore:
+
+1. LocalDevVPN on. SideStore → Settings → **Sign Out**, then sign in again.
+2. When it asks which certificate to revoke (e.g. "iloader"), tap
+   **Revoke**. SideStore creates its own certificate.
+3. Right away: *My Apps* → refresh **SideStore** itself, then
+   **Refresh All**. A running app is not stopped by a revoked certificate,
+   but SideStore will not reopen until it is re-signed.
+
+Do not delete Saber to fix signing problems: deleting removes notes that
+are not yet synced to Nextcloud.
 
 First-time iPad setup also needs Developer Mode
 (*Settings → Privacy & Security*) and trusting the Apple ID under
