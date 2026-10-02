@@ -54,7 +54,7 @@ jobs:
         run: |
           buildName=$(sed -n "s/^const buildName = '\(.*\)';/\1/p" lib/data/version.dart)
           tag="ipad-v${buildName}-${GITHUB_RUN_NUMBER}"
-          ipaPath="Saber_v${buildName}_unsigned.ipa"
+          ipaPath="Saber_v${buildName}-${GITHUB_RUN_NUMBER}_unsigned.ipa"
 
           mkdir Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
