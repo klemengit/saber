@@ -4,6 +4,8 @@ import workmanager_apple
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var pencilInteractionHandler: PencilInteractionHandler?
+
   /// Registers all pubspec-referenced Flutter plugins in the given registry
   static func registerPlugins(with registry: FlutterPluginRegistry) {
     GeneratedPluginRegistrant.register(with: registry)
@@ -26,5 +28,57 @@ import workmanager_apple
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     AppDelegate.registerPlugins(with: engineBridge.pluginRegistry)
+    pencilInteractionHandler = PencilInteractionHandler(
+      messenger: engineBridge.applicationRegistrar.messenger())
+  }
+}
+
+/// Forwards Apple Pencil double taps to Dart.
+///
+/// Dart calls `attach` once it wants to receive taps,
+/// and is then sent `doubleTap` with either `ignore` or `toggle`,
+/// depending on the user's double-tap setting in iPadOS.
+class PencilInteractionHandler: NSObject, UIPencilInteractionDelegate {
+  private let channel: FlutterMethodChannel
+  private let interaction = UIPencilInteraction()
+
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(
+      name: "saber/pencil_interaction", binaryMessenger: messenger)
+    super.init()
+    interaction.delegate = self
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "attach" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      self?.attach()
+      result(nil)
+    }
+  }
+
+  private func attach() {
+    guard interaction.view == nil else { return }
+    let window = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first { $0.isKeyWindow }
+    (window?.rootViewController?.view ?? window)?.addInteraction(interaction)
+  }
+
+  @available(iOS 17.5, *)
+  func pencilInteraction(
+    _ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap
+  ) {
+    sendDoubleTap()
+  }
+
+  func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
+    sendDoubleTap()
+  }
+
+  private func sendDoubleTap() {
+    let ignore = UIPencilInteraction.preferredTapAction == .ignore
+    channel.invokeMethod("doubleTap", arguments: ignore ? "ignore" : "toggle")
   }
 }

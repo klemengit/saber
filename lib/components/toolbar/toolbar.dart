@@ -19,6 +19,7 @@ import 'package:saber/components/toolbar/size_picker.dart';
 import 'package:saber/components/toolbar/toolbar_button.dart';
 import 'package:saber/data/editor/page.dart';
 import 'package:saber/data/extensions/color_extensions.dart';
+import 'package:saber/data/pencil_double_tap.dart';
 import 'package:saber/data/prefs.dart';
 import 'package:saber/data/tools/_tool.dart';
 import 'package:saber/data/tools/eraser.dart';
@@ -96,6 +97,7 @@ class _ToolbarState extends State<Toolbar> {
   @override
   void initState() {
     _assignKeybindings();
+    PencilDoubleTap.addListener(toggleEraser);
 
     DynamicMaterialApp.addFullscreenListener(_setState);
 
@@ -576,6 +578,7 @@ class _ToolbarState extends State<Toolbar> {
     DynamicMaterialApp.setFullscreen(false, updateSystem: true);
 
     _removeKeybindings();
+    PencilDoubleTap.removeListener(toggleEraser);
     super.dispose();
   }
 }
