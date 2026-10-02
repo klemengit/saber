@@ -31,7 +31,8 @@ For a change in this fork, or after merging upstream updates (below):
 
    It takes about 10–15 minutes. Watch it with
    `gh run list -R klemengit/saber --workflow fork-release.yml`.
-   It creates a release named `v<version>-<run number>` with the iPad
+   It creates a release named `v<version>-fork.<n>` (e.g. `v1.36.1-fork.2`;
+   `<n>` restarts at 1 after an upstream version change) with the iPad
    `.ipa` and Linux `.AppImage` / `.tar.gz` files (x86_64 and arm64).
 3. On the iPad, with LocalDevVPN on: open the release in Safari, download the
    `.ipa`, then SideStore → *My Apps* → **+** → pick the file.
