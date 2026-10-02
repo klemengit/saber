@@ -3,8 +3,8 @@
 This fork (`klemengit/saber`) adds resizing of the lasso selection with corner
 handles. It runs on the iPad without a paid Apple Developer account:
 
-1. GitHub Actions builds an **unsigned** `.ipa` and publishes it as a GitHub
-   release.
+1. GitHub Actions builds an **unsigned** `.ipa` (plus Linux builds) and
+   publishes them as a GitHub release.
 2. **SideStore** on the iPad signs it with a free Apple ID and installs it.
 3. **LocalDevVPN** lets SideStore reach the iPad's own install service. It is
    a loopback VPN: no traffic leaves the iPad.
@@ -26,12 +26,13 @@ For a change in this fork, or after merging upstream updates (below):
 2. Start the build:
 
    ```sh
-   gh workflow run ios-sideload.yml -R klemengit/saber
+   gh workflow run fork-release.yml -R klemengit/saber
    ```
 
-   It takes about 8 minutes. Watch it with
-   `gh run list -R klemengit/saber --workflow ios-sideload.yml`.
-   It creates a pre-release named `ipad-v<version>-<run number>`.
+   It takes about 10–15 minutes. Watch it with
+   `gh run list -R klemengit/saber --workflow fork-release.yml`.
+   It creates a release named `v<version>-<run number>` with the iPad
+   `.ipa` and Linux `.AppImage` / `.tar.gz` files (x86_64 and arm64).
 3. On the iPad, with LocalDevVPN on: open the release in Safari, download the
    `.ipa`, then SideStore → *My Apps* → **+** → pick the file.
    It replaces the installed Saber and keeps notes and settings.

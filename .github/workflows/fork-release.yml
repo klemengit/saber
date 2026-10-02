@@ -1,0 +1,186 @@
+name: Fork release
+
+# Builds this fork for iPad and Linux and publishes one GitHub release.
+# The iPad build is unsigned: SideStore signs it with your own Apple ID.
+#
+# Run it from the Actions tab, or with:
+#   gh workflow run fork-release.yml -R klemengit/saber
+#
+# Manual-only on purpose: pushing a tag would also start the
+# upstream release workflows, which need secrets this fork lacks.
+# A release created with GITHUB_TOKEN does not trigger them.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build iOS (unsigned)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app
+          xcodebuild -runFirstLaunch
+          xcodebuild -downloadPlatform iOS -version 26.3
+
+      - name: Setup Flutter
+        uses: adil192/setup-flutter-submodule@v3
+        with:
+          flutter-path: submodules/flutter
+          cache-flutter: false
+          cache-pub: false
+          no-save-caches: true
+
+      - name: Disable Flutter CLI animations
+        run: flutter config --no-cli-animations
+
+      - name: Build for iOS without code signing
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=FLAVOR="Sideload" \
+            --dart-define=UPDATE_CHECK="false"
+
+      - name: Package IPA
+        run: |
+          buildName=$(sed -n "s/^const buildName = '\(.*\)';/\1/p" lib/data/version.dart)
+          mkdir -p Payload dist
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr "dist/Saber_v${buildName}-${GITHUB_RUN_NUMBER}_iPad_unsigned.ipa" Payload
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios
+          path: dist/
+
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - runs-on: ubuntu-latest
+            target-platform: linux-x64
+            flutter-output-folder: build/linux/x64/release/bundle
+            archive-suffix: x86_64
+            linuxdeploy-exe: linuxdeploy-x86_64.AppImage
+          - runs-on: ubuntu-24.04-arm
+            target-platform: linux-arm64
+            flutter-output-folder: build/linux/arm64/release/bundle
+            archive-suffix: arm64
+            linuxdeploy-exe: linuxdeploy-aarch64.AppImage
+    runs-on: ${{ matrix.arch.runs-on }}
+    timeout-minutes: 30
+    name: Build Linux (${{ matrix.arch.target-platform }})
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: "./.github/shared_workflows/install_apt_dependencies"
+
+      - name: Setup Flutter
+        uses: adil192/setup-flutter-submodule@v3
+        with:
+          flutter-path: submodules/flutter
+
+      - name: Disable Flutter CLI animations
+        run: flutter config --no-cli-animations
+
+      - run: ./patches/pre/remove_permission_handler.sh
+      - run: ./patches/pre/remove_proprietary_dependencies.sh
+
+      - name: Build Linux (${{ matrix.arch.target-platform }})
+        run: |
+          flutter build linux \
+            --target-platform ${{ matrix.arch.target-platform }} \
+            --dart-define=FLAVOR="Fork" \
+            --dart-define=UPDATE_CHECK="false"
+
+      - name: Compress Flutter build
+        run: |
+          buildName=$(sed -n "s/^const buildName = '\(.*\)';/\1/p" lib/data/version.dart)
+          echo "buildName=$buildName" >> "$GITHUB_ENV"
+          mkdir -p AppDir dist
+          mv ${{ matrix.arch.flutter-output-folder }}/* AppDir
+          chmod +x AppDir/saber
+
+          install -Dm644 flatpak/com.adilhanney.saber.metainfo.xml -t AppDir/share/metainfo/
+          install -Dm644 assets/icon/icon_linux.svg AppDir/share/icons/hicolor/scalable/apps/com.adilhanney.saber.svg
+          install -Dm644 flatpak/com.adilhanney.saber.desktop -t AppDir/share/applications/
+
+          tar -C AppDir -czf "dist/Saber_v${buildName}-${GITHUB_RUN_NUMBER}_Linux_${{ matrix.arch.archive-suffix }}.tar.gz" .
+
+      - name: Install FUSE
+        run: |
+          sudo add-apt-repository universe
+          sudo apt-get install libfuse2t64
+
+      - name: Prepare AppDir for AppImage
+        run: |
+          rm -rf linux/AppImage/AppDir/
+          mkdir -p linux/AppImage/AppDir/usr/bin/
+          cp -R AppDir/* linux/AppImage/AppDir/usr/bin/
+          mv linux/AppImage/AppDir/usr/bin/share linux/AppImage/AppDir/usr/
+
+          echo "LDAI_OUTPUT=Saber-${buildName}-${GITHUB_RUN_NUMBER}-${{ matrix.arch.archive-suffix }}.AppImage" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$(pwd)/linux/AppImage/AppDir/usr/bin/lib:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          echo "LDAI_UPDATE_INFORMATION=gh-releases-zsync|${GITHUB_REPOSITORY_OWNER}|${GITHUB_REPOSITORY#*/}|latest|Saber-*-${{ matrix.arch.archive-suffix }}.AppImage.zsync" >> "$GITHUB_ENV"
+
+      - name: Build AppImage
+        working-directory: linux/AppImage
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/${{ matrix.arch.linuxdeploy-exe }}
+          chmod +x ${{ matrix.arch.linuxdeploy-exe }}
+          ./${{ matrix.arch.linuxdeploy-exe }} --appdir AppDir --output appimage
+          mv Saber-*.AppImage* ../../dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-${{ matrix.arch.archive-suffix }}
+          path: dist/
+
+  release:
+    name: Publish release
+    needs: [build-ios, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        run: |
+          ls -la dist
+          ipa=$(ls dist/*.ipa)
+          version=$(basename "$ipa" | sed -n 's/^Saber_v\(.*\)_iPad_unsigned.ipa$/\1/p')
+          tag="v${version}"
+          cat > notes.md <<NOTES
+          Build of ${GITHUB_REPOSITORY} at ${GITHUB_SHA::8}.
+
+          **Linux:** download the \`.AppImage\` for your CPU (\`x86_64\` for most PCs), make it executable (\`chmod +x Saber-*.AppImage\`) and run it. The \`.tar.gz\` is the same app unpacked; run \`./saber\` inside it.
+
+          **iPad:** the \`.ipa\` is unsigned. Install it with [SideStore](https://sidestore.io), which signs it with your own Apple ID.
+          NOTES
+          gh release create "$tag" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Saber $tag (fork)" \
+            --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
